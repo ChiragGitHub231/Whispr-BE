@@ -7,13 +7,16 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "db:migrate": "node db/migrate.js"
   },
   "dependencies": {
-    "fastify": "^4.28.1"
+    "fastify": "^4.28.1",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
+    "supabase": "^2.105.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.2"
   }

@@ -33,3 +33,6 @@ out/
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI configurations and local migrations
+supabase/
