@@ -53,6 +53,22 @@ The compiled code will be output to the `/dist` directory. You can start the ser
 npm run start
 ```
 
+### 🗄️ Database Setup & Migrations
+
+To apply the database schema, configure your database connection string and run migrations:
+
+1. Copy `.env.example` to create `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Open `.env` and fill in your actual Supabase PostgreSQL connection string as `SUPABASE_DB_URL`.
+3. Execute the migration script:
+   ```bash
+   npm run db:migrate
+   ```
+
+The script will read the schema from `db/schema.sql` and create the required profiles, user status, rooms, room members, and messages tables along with indexes.
+
 ---
 
 ## 🔌 API Endpoints
@@ -90,6 +106,7 @@ You can customize the server behavior using environment variables:
 |:---|:---|:---|
 | `PORT` | The port number on which the Fastify server listens | `3001` |
 | `HOST` | The network interface host | `0.0.0.0` |
+| `SUPABASE_DB_URL` | The PostgreSQL URI for Supabase database connection | *Required for migration* |
 
 ---
 
@@ -97,6 +114,9 @@ You can customize the server behavior using environment variables:
 
 ```
 Whispr-BE/
+├── db/                   # Database schema definitions and migration scripts
+│   ├── migrate.js        # Script to run database schema migrations
+│   └── schema.sql        # Database schema definitions
 ├── dist/                 # Compiled JavaScript files (after npm run build)
 ├── node_modules/         # Node dependencies
 ├── src/
@@ -106,7 +126,9 @@ Whispr-BE/
 │   ├── app.ts            # Fastify app instantiation and route registration
 │   └── server.ts         # Server entrypoint, listener startup, and logger config
 ├── tsconfig.json         # TypeScript configuration
-└── package.json          # Node project scripts & dependencies
+├── package.json          # Node project scripts & dependencies
+├── .env.example          # Template for environment variables configuration
+└── .gitignore            # Root Git ignore configuration (excludes supabase/ CLI directory)
 ```
 
 ---
