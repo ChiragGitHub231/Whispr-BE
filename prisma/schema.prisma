@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("SUPABASE_DB_URL")
+}
+
+model messages {
+  id         BigInt    @id @default(autoincrement())
+  room_id    String    @db.Uuid
+  sender_id  String?   @db.Uuid
+  text       String?
+  file_url   String?
+  status     String    @default("sent") @db.VarChar(15)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  rooms      rooms     @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles   profiles? @relation(fields: [sender_id], references: [id], onUpdate: NoAction)
+
+  @@index([room_id, created_at(sort: Desc)], map: "idx_messages_room_created")
+}
+
+model profiles {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String         @db.VarChar(100)
+  email        String         @unique @db.VarChar(255)
+  password     String         @db.VarChar(255)
+  contact_no   String?        @db.VarChar(20)
+  avatar_url   String?
+  created_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  messages     messages[]
+  room_members room_members[]
+  user_status  user_status?
+
+  @@index([email], map: "idx_profiles_email")
+}
+
+model room_members {
+  id        BigInt    @id @default(autoincrement())
+  room_id   String    @db.Uuid
+  user_id   String    @db.Uuid
+  joined_at DateTime? @default(now()) @db.Timestamptz(6)
+  rooms     rooms     @relation(fields: [room_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles  profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([room_id, user_id])
+}
+
+model rooms {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  is_group     Boolean        @default(false)
+  name         String?        @db.VarChar(100)
+  created_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  messages     messages[]
+  room_members room_members[]
+}
+
+model user_status {
+  id        String    @id @db.Uuid
+  is_online Boolean   @default(false)
+  last_seen DateTime? @default(now()) @db.Timestamptz(6)
+  profiles  profiles  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
