@@ -53,21 +53,28 @@ The compiled code will be output to the `/dist` directory. You can start the ser
 npm run start
 ```
 
-### 🗄️ Database Setup & Migrations
+### 🗄️ Database Setup & ORM (Prisma)
 
-To apply the database schema, configure your database connection string and run migrations:
+This project uses **Prisma ORM** for database mapping, type-safe queries, and relation management.
 
 1. Copy `.env.example` to create `.env`:
    ```bash
    cp .env.example .env
    ```
-2. Open `.env` and fill in your actual Supabase PostgreSQL connection string as `SUPABASE_DB_URL`.
-3. Execute the migration script:
+2. Open `.env` and fill in your actual Supabase PostgreSQL connection string as `SUPABASE_DB_URL` and a secure secret for `JWT_SECRET`.
+3. Introspect and sync the schema from your active database:
+   ```bash
+   npx prisma db pull
+   ```
+4. Generate the local Prisma Client:
+   ```bash
+   npx prisma generate
+   ```
+5. Push schema updates directly (if changes are made to `schema.prisma`):
    ```bash
    npm run db:migrate
    ```
-
-The script will read the schema from `db/schema.sql` and create the required profiles, user status, rooms, room members, and messages tables along with indexes.
+   *(This runs `prisma db push` under the hood).*
 
 ---
 
@@ -96,6 +103,22 @@ The script will read the schema from `db/schema.sql` and create the required pro
   }
   ```
 
+### 3. User Authentication
+All authentication endpoints reside under the `/api/auth` prefix and use secure HTTP-only session cookies.
+
+- **Register:** `POST /api/auth/register`
+  - *Payload:* `{"email": "...", "password": "...", "name": "...", "contact_no": "...", "avatar_url": "..."}`
+  - *Response:* `201 Created` with user profile JSON. Sets `token` cookie.
+- **Login:** `POST /api/auth/login`
+  - *Payload:* `{"email": "...", "password": "..."}`
+  - *Response:* `200 OK` with user profile JSON. Sets `token` cookie.
+- **Logout:** `POST /api/auth/logout`
+  - *Payload:* None
+  - *Response:* `200 OK` and clears the `token` cookie.
+- **Get Profile:** `GET /api/auth/me` (Protected)
+  - *Payload:* None (Requires valid `token` cookie)
+  - *Response:* `200 OK` with active profile JSON.
+
 ---
 
 ## ⚙️ Configuration & Environment Variables
@@ -106,7 +129,8 @@ You can customize the server behavior using environment variables:
 |:---|:---|:---|
 | `PORT` | The port number on which the Fastify server listens | `3001` |
 | `HOST` | The network interface host | `0.0.0.0` |
-| `SUPABASE_DB_URL` | The PostgreSQL URI for Supabase database connection | *Required for migration* |
+| `SUPABASE_DB_URL` | The PostgreSQL URI for Supabase database connection | *Required* |
+| `JWT_SECRET` | Secret key used to sign and verify JWT session tokens | *Required* |
 
 ---
 
@@ -114,21 +138,22 @@ You can customize the server behavior using environment variables:
 
 ```
 Whispr-BE/
-├── db/                   # Database schema definitions and migration scripts
-│   ├── migrate.js        # Script to run database schema migrations
-│   └── schema.sql        # Database schema definitions
+├── prisma/               # Prisma ORM configuration and schemas
+│   └── schema.prisma     # Database schema models and database mappings
 ├── dist/                 # Compiled JavaScript files (after npm run build)
 ├── node_modules/         # Node dependencies
 ├── src/
 │   ├── routes/           # Fastify route plugins
+│   │   ├── auth.ts       # Authentication endpoints (Register, Login, Logout, Me)
 │   │   ├── health.ts     # Health-check route definitions
 │   │   └── root.ts       # Root welcome endpoint
-│   ├── app.ts            # Fastify app instantiation and route registration
-│   └── server.ts         # Server entrypoint, listener startup, and logger config
+│   ├── app.ts            # Fastify app configuration (Cookie, JWT, CORS, Routing)
+│   ├── db.ts             # Prisma Client client instantiation
+│   └── server.ts         # Server entrypoint (loads dotenv and starts logger/listener)
 ├── tsconfig.json         # TypeScript configuration
 ├── package.json          # Node project scripts & dependencies
 ├── .env.example          # Template for environment variables configuration
-└── .gitignore            # Root Git ignore configuration (excludes supabase/ CLI directory)
+└── .gitignore            # Root Git ignore configuration
 ```
 
 ---
