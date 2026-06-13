@@ -5,6 +5,7 @@ import fastifyCors from '@fastify/cors';
 import healthRoutes from './routes/health.js';
 import rootRoutes from './routes/root.js';
 import authRoutes from './routes/auth.js';
+import roomsRoutes from './routes/rooms.js';
 
 export function buildApp(opts = {}) {
   const app = fastify(opts);
@@ -38,6 +39,7 @@ export function buildApp(opts = {}) {
   app.register(rootRoutes);
   app.register(healthRoutes);
   app.register(authRoutes, { prefix: '/api/auth' });
+  app.register(roomsRoutes, { prefix: '/api/rooms' });
 
   return app;
 }

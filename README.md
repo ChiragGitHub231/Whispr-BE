@@ -118,6 +118,38 @@ All authentication endpoints reside under the `/api/auth` prefix and use secure 
 - **Get Profile:** `GET /api/auth/me` (Protected)
   - *Payload:* None (Requires valid `token` cookie)
   - *Response:* `200 OK` with active profile JSON.
+- **Delete Account:** `DELETE /api/auth/me` (Protected)
+  - *Payload:* None (Requires valid `token` cookie)
+  - *Response:* `200 OK` on successful account deletion (removes profile, status, room memberships, nullifies message sender IDs, and clears cookie).
+
+### 4. Room Management
+All room management endpoints reside under the `/api/rooms` prefix and require JWT authentication via the `token` cookie.
+
+- **Create Room:** `POST /api/rooms` (Protected)
+  - *Payload (Direct Message):* `{"is_group": false, "email": "otheruser@example.com", "name": "Optional Custom Name"}`
+  - *Payload (Group Chat):* `{"is_group": true, "name": "Group Name", "email": ["member1@example.com", "member2@example.com"]}` (can also pass a single email string)
+  - *Response:* `201 Created` (or `200 OK` if reusing an existing DM room) with the room object including members.
+- **List Rooms:** `GET /api/rooms` (Protected)
+  - *Response:* `200 OK` with `{ "rooms": [...] }` containing all rooms the user is a member of.
+- **Get Room Details:** `GET /api/rooms/:id` (Protected)
+  - *Response:* `200 OK` with details of the specific room.
+- **Update Room Name:** `PATCH /api/rooms/:id` (Protected)
+  - *Payload:* `{"name": "New Group Name"}`
+  - *Permission:* Only `owner` or `admin` of the group room can rename it. Direct Message rooms cannot be renamed.
+  - *Response:* `200 OK` with the updated room.
+- **Delete Room:** `DELETE /api/rooms/:id` (Protected)
+  - *Permission:* Only `owner` of the group room can delete it. Direct Message rooms cannot be deleted.
+  - *Response:* `200 OK` with a success message.
+- **Add Room Members:** `POST /api/rooms/:id/members` (Protected)
+  - *Payload:* `{"userIds": ["uuid-1", "uuid-2"]}`
+  - *Permission:* Only `owner` or `admin` of the group room can add members.
+  - *Response:* `200 OK` with the updated room details.
+- **Remove Member / Leave Room:** `DELETE /api/rooms/:id/members/:userId` (Protected)
+  - *Description:* Allows leaving a room or removing a member.
+    - **DM Room:** A user can only leave (their own `userId` must be passed).
+    - **Group Room:** A member can leave. If the `owner` leaves and other members remain, ownership is automatically transferred to the oldest admin, or the oldest member if no admins exist. Alternatively, an `owner` or `admin` can remove other members (admins cannot remove owners or other admins).
+    - If a room is left with no remaining members, it is deleted automatically.
+  - *Response:* `200 OK` with message.
 
 ---
 
@@ -144,8 +176,9 @@ Whispr-BE/
 ├── node_modules/         # Node dependencies
 ├── src/
 │   ├── routes/           # Fastify route plugins
-│   │   ├── auth.ts       # Authentication endpoints (Register, Login, Logout, Me)
+│   │   ├── auth.ts       # Authentication endpoints (Register, Login, Logout, Me, Delete)
 │   │   ├── health.ts     # Health-check route definitions
+│   │   ├── rooms.ts      # Room management endpoints (Create, List, Details, Members)
 │   │   └── root.ts       # Root welcome endpoint
 │   ├── app.ts            # Fastify app configuration (Cookie, JWT, CORS, Routing)
 │   ├── db.ts             # Prisma Client client instantiation
