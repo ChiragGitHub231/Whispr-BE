@@ -24,7 +24,7 @@ interface LoginBody {
 }
 
 const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
-  
+
   // Register Route
   fastify.post<{ Body: RegisterBody }>('/register', async (request, reply) => {
     const { email: rawEmail, password: rawPassword, name: rawName, contact_no, avatar_url } = request.body || {};
@@ -140,6 +140,7 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
             is_online: false,
           },
         });
+
 
         return profile;
       });
@@ -285,7 +286,7 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
 
     try {
       const { id } = request.user;
-      
+
       const profile = await prisma.profiles.findUnique({
         where: { id },
         select: {
@@ -319,6 +320,79 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'An error occurred while fetching your profile.',
+      });
+    }
+  });
+
+  // Delete Current Profile (Protected Route)
+  fastify.delete('/me', async (request, reply) => {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Session has expired or is invalid. Please log in again.',
+      });
+    }
+
+    try {
+      const userId = request.user.id;
+
+      // Check if profile exists
+      const profile = await prisma.profiles.findUnique({
+        where: { id: userId },
+      });
+
+      if (!profile) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          message: 'User profile not found.',
+        });
+      }
+
+      // Perform cascading deletion and update in a transaction
+      await prisma.$transaction(async (tx) => {
+        // 1. Update all messages sent by this user to set sender_id to null (preserving message history)
+        await tx.messages.updateMany({
+          where: {
+            sender_id: userId,
+          },
+          data: {
+            sender_id: null,
+          },
+        });
+
+        // 2. Delete the user status record
+        await tx.user_status.deleteMany({
+          where: {
+            id: userId,
+          },
+        });
+
+        // 3. Delete the profile itself (cascading automatically to delete room_members records)
+        await tx.profiles.delete({
+          where: {
+            id: userId,
+          },
+        });
+      });
+
+      // Clear the JWT token cookie
+      reply.clearCookie('token', {
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'lax',
+      });
+
+      return reply.status(200).send({
+        message: 'User account deleted successfully.',
+      });
+    } catch (err) {
+      request.log.error(err, 'Error deleting user profile');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'An error occurred while deleting your profile.',
       });
     }
   });
