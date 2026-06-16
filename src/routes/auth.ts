@@ -324,6 +324,65 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     }
   });
 
+  // Update Current Profile (Protected Route)
+  fastify.put('/me', async (request, reply) => {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Session has expired or is invalid. Please log in again.',
+      });
+    }
+
+    try {
+      const { id } = request.user;
+      const { name, contact_no, avatar_url } = request.body as { name?: string; contact_no?: string; avatar_url?: string };
+
+      if (!name) {
+        return reply.status(400).send({
+          error: 'Bad Request',
+          message: 'Name is required.',
+        });
+      }
+
+      const updated = await prisma.profiles.update({
+        where: { id },
+        data: {
+          name,
+          contact_no,
+          avatar_url,
+          updated_at: new Date(),
+        },
+        select: {
+          name: true,
+          email: true,
+          contact_no: true,
+          avatar_url: true,
+          updated_at: true,
+        }
+      });
+
+      return reply.status(200).send({
+        message: 'Profile updated successfully',
+        user: {
+          id,
+          name: updated.name,
+          email: updated.email,
+          contact_no: updated.contact_no,
+          avatar_url: updated.avatar_url,
+          updated_at: updated.updated_at,
+        }
+      });
+    } catch (err) {
+      request.log.error(err, 'Error updating current user profile');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'An error occurred while updating your profile.',
+      });
+    }
+  });
+
   // Delete Current Profile (Protected Route)
   fastify.delete('/me', async (request, reply) => {
     try {
@@ -393,6 +452,56 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'An error occurred while deleting your profile.',
+      });
+    }
+  });
+
+  // Verify user exists by email
+  fastify.get<{ Params: { email: string } }>('/check/:email', async (request, reply) => {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Session has expired or is invalid. Please log in again.',
+      });
+    }
+
+    const { email } = request.params;
+    if (!email) {
+      return reply.status(400).send({
+        error: 'Bad Request',
+        message: 'Email parameter is required.',
+      });
+    }
+
+    try {
+      const profile = await prisma.profiles.findUnique({
+        where: { email: email.toLowerCase().trim() },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatar_url: true,
+        },
+      });
+
+      if (!profile) {
+        return reply.status(404).send({
+          exists: false,
+          message: 'No user profile found with the specified email address.',
+        });
+      }
+
+      return reply.status(200).send({
+        exists: true,
+        profile,
+      });
+    } catch (err) {
+      request.log.error(err, 'Error verifying email');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to verify email.',
       });
     }
   });

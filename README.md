@@ -118,6 +118,12 @@ All authentication endpoints reside under the `/api/auth` prefix and use secure 
 - **Get Profile:** `GET /api/auth/me` (Protected)
   - *Payload:* None (Requires valid `token` cookie)
   - *Response:* `200 OK` with active profile JSON.
+- **Update Profile:** `PUT /api/auth/me` (Protected)
+  - *Payload:* `{"name": "...", "contact_no": "...", "avatar_url": "..."}` (name is required, other fields optional)
+  - *Response:* `200 OK` with `{ "message": "Profile updated successfully", "user": { ... } }`.
+- **Check User Email:** `GET /api/auth/check/:email` (Protected)
+  - *Description:* Validates whether a user exists by email, retrieving their public details.
+  - *Response:* `200 OK` with `{ "exists": true, "profile": { "id": "...", "name": "...", "email": "...", "avatar_url": "..." } }` if found; `404 Not Found` with `{ "exists": false, "message": "..." }` otherwise.
 - **Delete Account:** `DELETE /api/auth/me` (Protected)
   - *Payload:* None (Requires valid `token` cookie)
   - *Response:* `200 OK` on successful account deletion (removes profile, status, room memberships, nullifies message sender IDs, and clears cookie).
