@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import bcrypt from 'bcrypt';
 import prisma from '../db.js';
+import { uploadBase64Image, deleteStorageFile } from '../utils/storage.js';
 
 // Extend Fastify JWT types
 declare module '@fastify/jwt' {
@@ -346,12 +347,33 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
         });
       }
 
+      let finalAvatarUrl: string | null | undefined = avatar_url;
+
+      if (avatar_url && avatar_url.startsWith('data:image/')) {
+        const uploadResult = await uploadBase64Image(avatar_url, id);
+        if (uploadResult.error) {
+          request.log.error({ error: uploadResult.error }, 'Avatar upload failed');
+          return reply.status(400).send({
+            error: 'Bad Request',
+            message: uploadResult.error,
+          });
+        }
+        finalAvatarUrl = uploadResult.publicUrl;
+      } else if (!avatar_url || !avatar_url.trim()) {
+        finalAvatarUrl = null;
+      }
+
+      const currentProfile = await prisma.profiles.findUnique({
+        where: { id },
+        select: { avatar_url: true }
+      });
+
       const updated = await prisma.profiles.update({
         where: { id },
         data: {
           name,
           contact_no,
-          avatar_url,
+          avatar_url: finalAvatarUrl,
           updated_at: new Date(),
         },
         select: {
@@ -362,6 +384,16 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
           updated_at: true,
         }
       });
+
+      if (
+        currentProfile?.avatar_url &&
+        finalAvatarUrl !== undefined &&
+        currentProfile.avatar_url !== finalAvatarUrl
+      ) {
+        deleteStorageFile(currentProfile.avatar_url).catch((err) => {
+          request.log.error({ err }, 'Failed to clean up old avatar from storage');
+        });
+      }
 
       return reply.status(200).send({
         message: 'Profile updated successfully',

@@ -40,8 +40,24 @@ const roomInclude = {
           avatar_url: true,
           contact_no: true,
           updated_at: true,
+          user_status: {
+            select: {
+              is_online: true,
+              last_seen: true,
+            },
+          },
         },
       },
+    },
+  },
+  messages: {
+    orderBy: {
+      created_at: 'desc' as const,
+    },
+    take: 1,
+    select: {
+      text: true,
+      file_url: true,
     },
   },
 };
