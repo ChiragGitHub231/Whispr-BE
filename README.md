@@ -1,13 +1,15 @@
 # Whispr - Backend API
 
-The backend API for **Whispr**, a modern real-time chat application. This service is built with [Fastify](https://www.fastify.io/) and [TypeScript](https://www.typescriptlang.org/), providing a lightweight, fast, and robust foundation for chat operations.
+The backend API for **Whispr**, a modern real-time chat application. This service is built with [Fastify](https://www.fastify.io/) and [TypeScript](https://www.typescriptlang.org/), providing a lightweight, fast, and robust foundation for chat operations, including realtime messaging, read receipts, typing indicators, and online presence updates.
 
 ---
 
 ## 🚀 Technology Stack
 
 - **Framework:** [Fastify (v4)](https://www.fastify.io/)
+- **Realtime Transport:** [@fastify/websocket](https://github.com/fastify/fastify-websocket) for live chat events
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Database ORM:** [Prisma](https://www.prisma.io/)
 - **Development Tooling:** [tsx](https://github.com/privatenumber/tsx) for fast, hot-reloading execution
 - **Configuration:** Clean process-level environment variable configuration
 
@@ -74,13 +76,14 @@ This project uses **Prisma ORM** for database mapping, type-safe queries, and re
    ```bash
    npm run db:migrate
    ```
-   *(This runs `prisma db push` under the hood).*
+   _(This runs `prisma db push` under the hood)._
 
 ---
 
 ## 🔌 API Endpoints
 
 ### 1. Root Greeting
+
 - **Endpoint:** `GET /`
 - **Description:** Verifies that the API service is active and running.
 - **Response Format:**
@@ -92,6 +95,7 @@ This project uses **Prisma ORM** for database mapping, type-safe queries, and re
   ```
 
 ### 2. Health Check
+
 - **Endpoint:** `GET /health`
 - **Description:** Returns the status, uptime of the node process, and current server timestamp.
 - **Response Format:**
@@ -104,58 +108,99 @@ This project uses **Prisma ORM** for database mapping, type-safe queries, and re
   ```
 
 ### 3. User Authentication
+
 All authentication endpoints reside under the `/api/auth` prefix and use secure HTTP-only session cookies.
 
 - **Register:** `POST /api/auth/register`
-  - *Payload:* `{"email": "...", "password": "...", "name": "...", "contact_no": "...", "avatar_url": "..."}`
-  - *Response:* `201 Created` with user profile JSON. Sets `token` cookie.
+  - _Payload:_ `{"email": "...", "password": "...", "name": "...", "contact_no": "...", "avatar_url": "..."}`
+  - _Response:_ `201 Created` with user profile JSON. Sets `token` cookie.
 - **Login:** `POST /api/auth/login`
-  - *Payload:* `{"email": "...", "password": "..."}`
-  - *Response:* `200 OK` with user profile JSON. Sets `token` cookie.
+  - _Payload:_ `{"email": "...", "password": "..."}`
+  - _Response:_ `200 OK` with user profile JSON. Sets `token` cookie.
 - **Logout:** `POST /api/auth/logout`
-  - *Payload:* None
-  - *Response:* `200 OK` and clears the `token` cookie.
+  - _Payload:_ None
+  - _Response:_ `200 OK` and clears the `token` cookie.
 - **Get Profile:** `GET /api/auth/me` (Protected)
-  - *Payload:* None (Requires valid `token` cookie)
-  - *Response:* `200 OK` with active profile JSON.
+  - _Payload:_ None (Requires valid `token` cookie)
+  - _Response:_ `200 OK` with active profile JSON.
 - **Update Profile:** `PUT /api/auth/me` (Protected)
-  - *Payload:* `{"name": "...", "contact_no": "...", "avatar_url": "..."}` (name is required, other fields optional)
-  - *Response:* `200 OK` with `{ "message": "Profile updated successfully", "user": { ... } }`.
+  - _Payload:_ `{"name": "...", "contact_no": "...", "avatar_url": "..."}` (name is required, other fields optional)
+  - _Behavior:_ Supports raw Base64 data URLs for `avatar_url` (e.g. `data:image/png;base64,...`). If provided, converts and uploads it to the Supabase storage bucket `whispr_assets_storage` under the virtual path `profile_avatar/{userId}_{timestamp}.{extension}` and cleans up any old avatar.
+  - _Response:_ `200 OK` with `{ "message": "Profile updated successfully", "user": { ... } }`.
 - **Check User Email:** `GET /api/auth/check/:email` (Protected)
-  - *Description:* Validates whether a user exists by email, retrieving their public details.
-  - *Response:* `200 OK` with `{ "exists": true, "profile": { "id": "...", "name": "...", "email": "...", "avatar_url": "..." } }` if found; `404 Not Found` with `{ "exists": false, "message": "..." }` otherwise.
+  - _Description:_ Validates whether a user exists by email, retrieving their public details.
+  - _Response:_ `200 OK` with `{ "exists": true, "profile": { "id": "...", "name": "...", "email": "...", "avatar_url": "..." } }` if found; `404 Not Found` with `{ "exists": false, "message": "..." }` otherwise.
 - **Delete Account:** `DELETE /api/auth/me` (Protected)
-  - *Payload:* None (Requires valid `token` cookie)
-  - *Response:* `200 OK` on successful account deletion (removes profile, status, room memberships, nullifies message sender IDs, and clears cookie).
+  - _Payload:_ None (Requires valid `token` cookie)
+  - _Response:_ `200 OK` on successful account deletion (removes profile, status, room memberships, nullifies message sender IDs, and clears cookie).
 
 ### 4. Room Management
+
 All room management endpoints reside under the `/api/rooms` prefix and require JWT authentication via the `token` cookie.
 
 - **Create Room:** `POST /api/rooms` (Protected)
-  - *Payload (Direct Message):* `{"is_group": false, "email": "otheruser@example.com", "name": "Optional Custom Name"}`
-  - *Payload (Group Chat):* `{"is_group": true, "name": "Group Name", "email": ["member1@example.com", "member2@example.com"]}` (can also pass a single email string)
-  - *Response:* `201 Created` (or `200 OK` if reusing an existing DM room) with the room object including members.
+  - _Payload (Direct Message):_ `{"is_group": false, "email": "otheruser@example.com", "name": "Optional Custom Name"}`
+  - _Payload (Group Chat):_ `{"is_group": true, "name": "Group Name", "email": ["member1@example.com", "member2@example.com"]}` (can also pass a single email string)
+  - _Response:_ `201 Created` (or `200 OK` if reusing an existing DM room) with the room object including members.
 - **List Rooms:** `GET /api/rooms` (Protected)
-  - *Response:* `200 OK` with `{ "rooms": [...] }` containing all rooms the user is a member of.
+  - _Response:_ `200 OK` with `{ "rooms": [...] }` containing all rooms the user is a member of. Each room member details are populated with online presence status (`user_status`: `is_online` and `last_seen`), and each room contains a snippet of its last message (`text` and `file_url`).
 - **Get Room Details:** `GET /api/rooms/:id` (Protected)
-  - *Response:* `200 OK` with details of the specific room.
+  - _Response:_ `200 OK` with details of the specific room.
 - **Update Room Name:** `PATCH /api/rooms/:id` (Protected)
-  - *Payload:* `{"name": "New Group Name"}`
-  - *Permission:* Only `owner` or `admin` of the group room can rename it. Direct Message rooms cannot be renamed.
-  - *Response:* `200 OK` with the updated room.
+  - _Payload:_ `{"name": "New Group Name"}`
+  - _Permission:_ Only `owner` or `admin` of the group room can rename it. Direct Message rooms cannot be renamed.
+  - _Response:_ `200 OK` with the updated room.
 - **Delete Room:** `DELETE /api/rooms/:id` (Protected)
-  - *Permission:* Only `owner` of the group room can delete it. Direct Message rooms cannot be deleted.
-  - *Response:* `200 OK` with a success message.
+  - _Permission:_ Only `owner` of the group room can delete it. Direct Message rooms cannot be deleted.
+  - _Response:_ `200 OK` with a success message.
 - **Add Room Members:** `POST /api/rooms/:id/members` (Protected)
-  - *Payload:* `{"userIds": ["uuid-1", "uuid-2"]}`
-  - *Permission:* Only `owner` or `admin` of the group room can add members.
-  - *Response:* `200 OK` with the updated room details.
+  - _Payload:_ `{"userIds": ["uuid-1", "uuid-2"]}`
+  - _Permission:_ Only `owner` or `admin` of the group room can add members.
+  - _Response:_ `200 OK` with the updated room details.
 - **Remove Member / Leave Room:** `DELETE /api/rooms/:id/members/:userId` (Protected)
-  - *Description:* Allows leaving a room or removing a member.
+  - _Description:_ Allows leaving a room or removing a member.
     - **DM Room:** A user can only leave (their own `userId` must be passed).
     - **Group Room:** A member can leave. If the `owner` leaves and other members remain, ownership is automatically transferred to the oldest admin, or the oldest member if no admins exist. Alternatively, an `owner` or `admin` can remove other members (admins cannot remove owners or other admins).
     - If a room is left with no remaining members, it is deleted automatically.
-  - *Response:* `200 OK` with message.
+  - _Response:_ `200 OK` with message.
+
+### 5. Messaging & Realtime Events
+
+Message endpoints are protected and support the chat UI's realtime behavior.
+
+- **Fetch Room Messages:** `GET /api/messages/:roomId` (Protected)
+  - _Query Parameters:_
+    - `limit` (optional): The max number of messages to fetch (default: `30`).
+    - `before` (optional): ISO timestamp cursor. Fetches messages sent before this date.
+  - _Behavior:_ Returns messages in reverse chronological order and marks all unread messages from other users in the room as `read`.
+  - _Response:_ `200 OK` with `{ "messages": [...], "hasMore": true/false }` (reordered chronologically for presentation).
+- **Send Message:** `POST /api/messages/:roomId` (Protected)
+  - _Payload:_ `{"text": "Hello", "file_url": "optional-url"}`
+  - _Behavior:_ Saves the message and broadcasts it to all active clients in the room via WebSocket (`message:new` event).
+  - _Response:_ `201 Created` with the created message payload.
+- **Upload Message Attachment:** `POST /api/messages/:roomId/upload` (Protected)
+  - _Payload:_ `{"file_data_url": "data:mime/type;base64,...", "original_name": "filename.ext"}`
+  - _Behavior:_ Enforces a 50MB file size limit. Converts and uploads the Base64 attachment to the Supabase storage bucket `whispr_assets_storage` under virtual directory paths segmented by media type (`images/`, `videos/`, `audio/`, `documents/`, or `files/`).
+  - _Response:_ `200 OK` with `{ "file_url": "https://..." }`.
+- **Delete Message:** `DELETE /api/messages/:messageId` (Protected)
+  - _Behavior:_ Soft deletes a message by clearing its `text` content, setting `file_url` to null, and setting status to `'deleted'`. It also purges any associated attachment from the Supabase storage bucket. Emits a `message:delete` event to WebSocket clients.
+  - _Response:_ `200 OK` with `{ "message": "Message deleted successfully." }`.
+- **Clear Chat History:** `DELETE /api/messages/room/:roomId/clear` (Protected)
+  - _Behavior:_ Deletes all messages in the room from the database. Purges all associated message attachments from the Supabase storage bucket. Generates a senderless system message (e.g. *"Chat history cleared by Alice"*) and broadcasts a `message:clear` event to WebSocket clients.
+  - _Response:_ `200 OK` with `{ "message": "Chat cleared successfully.", "systemMessage": { ... } }`.
+- **Realtime WebSocket:** `GET /ws` (Protected via JWT cookie)
+  - _Description:_ Real-time connection utilizing `@fastify/websocket`. Connects clients and maps them to room sub-channels.
+  - _Events emitted by server to clients:_
+    - `message:new`: Broadcasts newly created messages.
+    - `message:read`: Broadcasts updated read receipts.
+    - `typing:update`: Broadcasts typing indicators for users (`isTyping: true/false`).
+    - `presence:update`: Broadcasts online/offline status changes of users.
+    - `message:delete`: Broadcasts when a message has been deleted.
+    - `message:clear`: Broadcasts when chat history has been cleared.
+  - _Events received by server from clients:_
+    - `typing`: Sends typing indicator payload to broadcast to the room.
+    - `typing-stop`: Sends typing stopped payload.
+    - `message:read`: Receives message IDs that were read by the user to mark them as `read` in the database and broadcast read receipts.
 
 ---
 
@@ -163,12 +208,15 @@ All room management endpoints reside under the `/api/rooms` prefix and require J
 
 You can customize the server behavior using environment variables:
 
-| Variable | Description | Default Value |
-|:---|:---|:---|
-| `PORT` | The port number on which the Fastify server listens | `3001` |
-| `HOST` | The network interface host | `0.0.0.0` |
-| `SUPABASE_DB_URL` | The PostgreSQL URI for Supabase database connection | *Required* |
-| `JWT_SECRET` | Secret key used to sign and verify JWT session tokens | *Required* |
+| Variable                     | Description                                                   | Default Value |
+| :--------------------------- | :------------------------------------------------------------ | :------------ |
+| `PORT`                       | The port number on which the Fastify server listens           | `3001`        |
+| `HOST`                       | The network interface host                                    | `0.0.0.0`     |
+| `SUPABASE_DB_URL`            | The PostgreSQL URI for Supabase database connection           | _Required_    |
+| `JWT_SECRET`                 | Secret key used to sign and verify JWT session tokens         | _Required_    |
+| `SUPABASE_URL`               | The public Supabase project URL (needed for storage upload)   | _Required_    |
+| `SUPABASE_SERVICE_ROLE_KEY`  | Service role key for authenticating admin storage operations  | _Required_    |
+| `SUPABASE_ANON_KEY`          | Alternative anonymous API key for storage uploads            | _Optional_    |
 
 ---
 
@@ -184,6 +232,7 @@ Whispr-BE/
 │   ├── routes/           # Fastify route plugins
 │   │   ├── auth.ts       # Authentication endpoints (Register, Login, Logout, Me, Delete)
 │   │   ├── health.ts     # Health-check route definitions
+│   │   ├── messages.ts   # Message fetch/send endpoints + websocket realtime handler
 │   │   ├── rooms.ts      # Room management endpoints (Create, List, Details, Members)
 │   │   └── root.ts       # Root welcome endpoint
 │   ├── app.ts            # Fastify app configuration (Cookie, JWT, CORS, Routing)
@@ -200,6 +249,7 @@ Whispr-BE/
 ## 🪵 Logger Configuration
 
 The backend features a customized logger setup via Fastify's built-in Pino logger, configured to:
+
 - Output timestamps converted to **Indian Standard Time (IST, UTC+5:30)** for easy debugging in your development environment.
 - Format custom output fields including `req` (method and URL) and `res` (statusCode).
 - Automatically format response times in seconds (e.g., `0.1 s`).
