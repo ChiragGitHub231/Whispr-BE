@@ -39,6 +39,7 @@ const roomInclude = {
           email: true,
           avatar_url: true,
           contact_no: true,
+          show_status: true,
           updated_at: true,
           user_status: {
             select: {

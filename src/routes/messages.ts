@@ -25,16 +25,42 @@ const serializeMessage = (message: any) => ({
   createdAt: message.created_at,
   sender: message.profiles
     ? {
-        id: message.profiles.id,
-        name: message.profiles.name,
-        avatarUrl: message.profiles.avatar_url,
-      }
+      id: message.profiles.id,
+      name: message.profiles.name,
+      avatarUrl: message.profiles.avatar_url,
+    }
     : null,
 });
 
+export const roomSockets = new Map<string, Set<SocketWithUser>>();
+export const userSockets = new Map<string, Set<SocketWithUser>>();
+
+export const broadcastShowStatusUpdate = async (userId: string, showStatus: boolean) => {
+  const settingData = JSON.stringify({
+    event: 'user:status-setting:update',
+    payload: { userId, showStatus },
+  });
+
+  const isOnline = userSockets.has(userId) && userSockets.get(userId)!.size > 0;
+
+  const presenceData = JSON.stringify({
+    event: 'presence:update',
+    payload: { userId, isOnline: showStatus ? isOnline : false },
+  });
+
+  for (const sockets of roomSockets.values()) {
+    for (const socket of sockets) {
+      try {
+        socket.send(settingData);
+        socket.send(presenceData);
+      } catch (err) {
+        // Ignore send errors for disconnected/stale sockets
+      }
+    }
+  }
+};
+
 const messageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
-  const roomSockets = new Map<string, Set<SocketWithUser>>();
-  const userSockets = new Map<string, Set<SocketWithUser>>();
 
   const addSocketToRoom = (roomId: string, socket: SocketWithUser) => {
     const roomSet = roomSockets.get(roomId) || new Set<SocketWithUser>();
@@ -70,7 +96,23 @@ const messageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     }
   };
 
-  const emitPresenceUpdate = (userId: string, isOnline: boolean) => {
+  const emitPresenceUpdate = async (userId: string, isOnline: boolean) => {
+    // Check if user has enabled show_status
+    try {
+      const userProfile = await prisma.profiles.findUnique({
+        where: { id: userId },
+        select: { show_status: true },
+      });
+
+      // Only emit presence if user has enabled show_status
+      if (!userProfile?.show_status) {
+        return;
+      }
+    } catch (error) {
+      fastify.log.error({ error }, `Failed to check show_status for user ${userId}`);
+      return;
+    }
+
     const data = JSON.stringify({
       event: 'presence:update',
       payload: { userId, isOnline },
@@ -576,7 +618,7 @@ const messageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     userSockets.set(currentUserId, userSet);
 
     await setUserOnlineStatus(currentUserId, true);
-    emitPresenceUpdate(currentUserId, true);
+    await emitPresenceUpdate(currentUserId, true);
 
     socket.on('message', async (rawMessage) => {
       try {
@@ -635,7 +677,7 @@ const messageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
         if (userSetAfter.size === 0) {
           userSockets.delete(currentUserId);
           await setUserOnlineStatus(currentUserId, false);
-          emitPresenceUpdate(currentUserId, false);
+          await emitPresenceUpdate(currentUserId, false);
         }
       }
     });

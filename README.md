@@ -113,19 +113,19 @@ All authentication endpoints reside under the `/api/auth` prefix and use secure 
 
 - **Register:** `POST /api/auth/register`
   - _Payload:_ `{"email": "...", "password": "...", "name": "...", "contact_no": "...", "avatar_url": "..."}`
-  - _Response:_ `201 Created` with user profile JSON. Sets `token` cookie.
+  - _Response:_ `201 Created` with user profile JSON (including default privacy settings: `show_status: true`, `read_receipts: true`). Sets `token` cookie.
 - **Login:** `POST /api/auth/login`
   - _Payload:_ `{"email": "...", "password": "..."}`
-  - _Response:_ `200 OK` with user profile JSON. Sets `token` cookie.
+  - _Response:_ `200 OK` with user profile JSON (including privacy settings: `show_status`, `read_receipts`). Sets `token` cookie.
 - **Logout:** `POST /api/auth/logout`
   - _Payload:_ None
   - _Response:_ `200 OK` and clears the `token` cookie.
 - **Get Profile:** `GET /api/auth/me` (Protected)
   - _Payload:_ None (Requires valid `token` cookie)
-  - _Response:_ `200 OK` with active profile JSON.
+  - _Response:_ `200 OK` with active profile JSON (including privacy settings: `show_status`, `read_receipts`).
 - **Update Profile:** `PUT /api/auth/me` (Protected)
-  - _Payload:_ `{"name": "...", "contact_no": "...", "avatar_url": "..."}` (name is required, other fields optional)
-  - _Behavior:_ Supports raw Base64 data URLs for `avatar_url` (e.g. `data:image/png;base64,...`). If provided, converts and uploads it to the Supabase storage bucket `whispr_assets_storage` under the virtual path `profile_avatar/{userId}_{timestamp}.{extension}` and cleans up any old avatar.
+  - _Payload:_ `{"name": "...", "contact_no": "...", "avatar_url": "...", "show_status": true/false, "read_receipts": true/false}` (name is required, other fields optional)
+  - _Behavior:_ Supports raw Base64 data URLs for `avatar_url` (e.g. `data:image/png;base64,...`). If provided, converts and uploads it to the Supabase storage bucket `whispr_assets_storage` under the virtual path `profile_avatar/{userId}_{timestamp}.{extension}` and cleans up any old avatar. Updates user-defined privacy options in the database; changing `show_status` triggers presence broadcasts.
   - _Response:_ `200 OK` with `{ "message": "Profile updated successfully", "user": { ... } }`.
 - **Check User Email:** `GET /api/auth/check/:email` (Protected)
   - _Description:_ Validates whether a user exists by email, retrieving their public details.
@@ -194,7 +194,8 @@ Message endpoints are protected and support the chat UI's realtime behavior.
     - `message:new`: Broadcasts newly created messages.
     - `message:read`: Broadcasts updated read receipts.
     - `typing:update`: Broadcasts typing indicators for users (`isTyping: true/false`).
-    - `presence:update`: Broadcasts online/offline status changes of users.
+    - `presence:update`: Broadcasts online/offline status changes of users. (Only emitted if the user's `show_status` privacy setting is enabled).
+    - `user:status-setting:update`: Broadcasts when a user updates their `show_status` privacy toggle.
     - `message:delete`: Broadcasts when a message has been deleted.
     - `message:clear`: Broadcasts when chat history has been cleared.
   - _Events received by server from clients:_
