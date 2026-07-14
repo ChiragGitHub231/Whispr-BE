@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import bcrypt from 'bcrypt';
 import prisma from '../db.js';
 import { uploadBase64Image, deleteStorageFile } from '../utils/storage.js';
+import { broadcastShowStatusUpdate } from './messages.js';
 
 // Extend Fastify JWT types
 declare module '@fastify/jwt' {
@@ -246,6 +247,8 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
           email: user.email,
           contact_no: user.contact_no,
           avatar_url: user.avatar_url,
+          show_status: user.show_status,
+          read_receipts: user.read_receipts,
           updated_at: user.updated_at,
         },
       });
@@ -295,6 +298,8 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
           email: true,
           contact_no: true,
           avatar_url: true,
+          show_status: true,
+          read_receipts: true,
           updated_at: true,
         },
       });
@@ -313,6 +318,8 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
           email: profile.email,
           contact_no: profile.contact_no,
           avatar_url: profile.avatar_url,
+          show_status: profile.show_status,
+          read_receipts: profile.read_receipts,
           updated_at: profile.updated_at,
         },
       });
@@ -338,7 +345,7 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
 
     try {
       const { id } = request.user;
-      const { name, contact_no, avatar_url } = request.body as { name?: string; contact_no?: string; avatar_url?: string };
+      const { name, contact_no, avatar_url, show_status, read_receipts } = request.body as { name?: string; contact_no?: string; avatar_url?: string; show_status?: boolean; read_receipts?: boolean };
 
       if (!name) {
         return reply.status(400).send({
@@ -368,22 +375,42 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
         select: { avatar_url: true }
       });
 
+      const updateData: any = {
+        name,
+        contact_no,
+        avatar_url: finalAvatarUrl,
+        updated_at: new Date(),
+      };
+
+      // Only update show_status if it's explicitly provided
+      if (show_status !== undefined) {
+        updateData.show_status = show_status;
+      }
+
+      // Only update read_receipts if it's explicitly provided
+      if (read_receipts !== undefined) {
+        updateData.read_receipts = read_receipts;
+      }
+
       const updated = await prisma.profiles.update({
         where: { id },
-        data: {
-          name,
-          contact_no,
-          avatar_url: finalAvatarUrl,
-          updated_at: new Date(),
-        },
+        data: updateData,
         select: {
           name: true,
           email: true,
           contact_no: true,
           avatar_url: true,
+          show_status: true,
+          read_receipts: true,
           updated_at: true,
         }
       });
+
+      if (show_status !== undefined) {
+        broadcastShowStatusUpdate(id, updated.show_status).catch((err) => {
+          request.log.error({ err }, 'Failed to broadcast show_status update');
+        });
+      }
 
       if (
         currentProfile?.avatar_url &&
@@ -403,6 +430,8 @@ const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
           email: updated.email,
           contact_no: updated.contact_no,
           avatar_url: updated.avatar_url,
+          show_status: updated.show_status,
+          read_receipts: updated.read_receipts,
           updated_at: updated.updated_at,
         }
       });
