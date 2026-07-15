@@ -155,6 +155,99 @@ const messageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
       });
     }
   });
+  
+  fastify.get('/api/media', async (request, reply) => {
+    const currentUserId = request.user.id;
+    try {
+      const userRooms = await prisma.room_members.findMany({
+        where: { user_id: currentUserId },
+        select: { room_id: true }
+      });
+      const roomIds = userRooms.map((rm) => rm.room_id);
+
+      const messages = await prisma.messages.findMany({
+        where: {
+          room_id: { in: roomIds },
+          file_url: { not: null },
+          status: { not: 'deleted' }
+        },
+        include: {
+          profiles: {
+            select: {
+              id: true,
+              name: true,
+              avatar_url: true,
+            }
+          },
+          rooms: {
+            select: {
+              id: true,
+              is_group: true,
+              name: true,
+              room_members: {
+                select: {
+                  profiles: {
+                    select: {
+                      id: true,
+                      name: true,
+                      avatar_url: true,
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' }
+      });
+
+      const mediaItems = messages.map((msg) => {
+        let roomName = msg.rooms.name || 'Direct Message';
+        if (!msg.rooms.is_group) {
+          const otherMember = msg.rooms.room_members.find(
+            (m) => m.profiles.id !== currentUserId
+          );
+          if (otherMember) {
+            roomName = otherMember.profiles.name;
+          }
+        }
+
+        const urlParts = msg.file_url!.split('/');
+        const filename = decodeURIComponent(urlParts[urlParts.length - 1]);
+        const cleanName = filename
+          .replace(/^[a-f0-9-]{36}_\d+_/, "")
+          .replace(/^\w+_\d+_/, "");
+
+        let fileType = 'document';
+        if (/\.(jpg|jpeg|png|gif|webp|svg)/i.test(msg.file_url!)) {
+          fileType = 'image';
+        } else if (/\.(mp4|webm|ogg|mov)/i.test(msg.file_url!)) {
+          fileType = 'video';
+        }
+
+        return {
+          id: msg.id.toString(),
+          roomId: msg.room_id,
+          roomName,
+          senderId: msg.sender_id,
+          senderName: msg.profiles?.name || 'Unknown',
+          senderAvatar: msg.profiles?.avatar_url,
+          url: msg.file_url,
+          name: cleanName || 'Attachment',
+          type: fileType,
+          createdAt: msg.created_at,
+        };
+      });
+
+      return reply.status(200).send({ media: mediaItems });
+    } catch (error) {
+      request.log.error(error, 'Error fetching shared media');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve shared media.',
+      });
+    }
+  });
 
   fastify.get('/api/messages/:roomId', async (request, reply) => {
     const { roomId } = request.params as { roomId: string };
