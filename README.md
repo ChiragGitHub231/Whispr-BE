@@ -168,6 +168,8 @@ All room management endpoints reside under the `/api/rooms` prefix and require J
 
 Message endpoints are protected and support the chat UI's realtime behavior.
 
+- **Fetch Shared Media:** `GET /api/media` (Protected)
+  - _Behavior:_ Scans all rooms joined by the current user to locate messages containing files/attachments (`file_url` not null) and returns a list of media attachments serialized with metadata (e.g. filename, type, chat room source name, and creation timestamp).
 - **Fetch Room Messages:** `GET /api/messages/:roomId` (Protected)
   - _Query Parameters:_
     - `limit` (optional): The max number of messages to fetch (default: `30`).
